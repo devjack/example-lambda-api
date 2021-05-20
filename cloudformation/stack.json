@@ -1,0 +1,273 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "",
+    "Metadata": {
+
+    },
+    "Parameters": {
+    
+    },
+    "Mappings": {
+
+    },
+    "Conditions": {
+
+    },
+    "Resources": {
+        "demoApiRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+               "AssumeRolePolicyDocument": {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                     {
+                        "Effect": "Allow",
+                        "Principal": {
+                           "Service": ["apigateway.amazonaws.com", "lambda.amazonaws.com"]
+                        },
+                        "Action": "sts:AssumeRole"
+                     }
+                  ]
+               },
+               "Path": "/service-role/",
+               "MaxSessionDuration": 3600
+            }
+        },
+        "demoApiPolicyExecution": {
+            "Type" : "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "frontgateDemoLambdaExecution",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "logs:CreateLogGroup",
+                            "Resource": "arn:aws:logs:*:*:*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Resource": [
+                                { "Fn::Sub" :
+                                    [ "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${functionName}:*",
+                                        { "functionName": { "Ref":"demoApiApplication"} }
+                                    ]
+                                    
+                                }
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "lambda:InvokeFunction"
+                            ],
+                            "Resource": [
+                                { "Fn::GetAtt" : ["demoApiApplication", "Arn"] }
+                            ]
+                        }
+                    ]
+                },
+                "Roles": [{"Ref":"demoApiRole"}]
+            }
+        },
+        "demoApiPolicyQueryDynamoDb": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "frontgateDemoQueryDynamoDb",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Sid": "VisualEditor0",
+                            "Effect": "Allow",
+                            "Action": [
+                                "dynamodb:ListTables",
+                                "dynamodb:BatchWriteItem",
+                                "dynamodb:PutItem",
+                                "dynamodb:DescribeTable",
+                                "dynamodb:GetItem",
+                                "dynamodb:Scan",
+                                "dynamodb:Query",
+                                "dynamodb:UpdateItem",
+                                "dynamodb:UpdateTable"
+                            ],
+                            "Resource": { "Fn::GetAtt" : ["quotesTable", "Arn"] }
+                        }
+                    ]
+                },
+                "Roles": [ {"Ref":"demoApiRole"} ]
+            }
+        },
+        "quotesTable" : {
+            "Type" : "AWS::DynamoDB::Table",
+            "Properties" : {
+              "AttributeDefinitions": [ { 
+                "AttributeName" : "quoteKey",
+                "AttributeType" : "S"
+              } ],
+              "KeySchema": [
+                { "AttributeName": "quoteKey", "KeyType": "HASH" }
+              ],
+              "ProvisionedThroughput" : {
+                "ReadCapacityUnits" : 5,
+                "WriteCapacityUnits" : 5
+              }                
+            }
+        },
+        "lambdaLogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "RetentionInDays": 7
+            }
+        },
+        "demoApiApplication": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Runtime": "python3.8",
+                "Role": { "Fn::GetAtt" : ["demoApiRole", "Arn"] },
+                "Environment": {
+                    "Variables" : {
+                        "quotesTable" : { "Ref": "quotesTable" }
+                    }
+                },
+                "Timeout": 10,
+                "Handler": "handler.lambda_handler",
+                "PackageType": "Zip",
+                "Code": {
+                    "S3Bucket" : "frontgate-demos-public",
+                    "S3Key" : "demo-simple.zip"
+                },
+                "Description": "Application/API to be run in lambda.",
+                "TracingConfig": {
+                    "Mode": "Active"
+                }
+            }
+        },
+
+
+        "demoApiGwRestApi": {
+            "Properties": {
+              "Description": "Initially created by Zappa.",
+              "Name": "demo-api-simple-dev"
+            },
+            "Type": "AWS::ApiGateway::RestApi"
+        },
+        "demoApiGwRestApiANY0": {
+            "Properties": {
+              "ApiKeyRequired": true,
+              "AuthorizationType": "NONE",
+              "HttpMethod": "ANY",
+              "Integration": {
+                "CacheKeyParameters": [],
+                "CacheNamespace": "none",
+                "Credentials": { "Fn::GetAtt" : ["demoApiRole", "Arn"] },
+                "IntegrationHttpMethod": "POST",
+                "IntegrationResponses": [],
+                "PassthroughBehavior": "NEVER",
+                "Type": "AWS_PROXY",
+                "Uri": { "Fn::Sub" :
+                    [ "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations", 
+                        { "lambdaArn": { "Fn::GetAtt" : ["demoApiApplication", "Arn"] } }
+                    ]
+                }
+              },
+              "MethodResponses": [],
+              "ResourceId": { "Fn::GetAtt": ["demoApiGwRestApi", "RootResourceId"] }, 
+              "RestApiId": { "Ref": "demoApiGwRestApi" }
+            },
+            "Type": "AWS::ApiGateway::Method"
+          },
+          "demoApiGwRestApiANY1": {
+            "Properties": {
+              "ApiKeyRequired": true,
+              "AuthorizationType": "NONE",
+              "HttpMethod": "ANY",
+              "Integration": {
+                "CacheKeyParameters": [],
+                "CacheNamespace": "none",
+                "Credentials": { "Fn::GetAtt" : ["demoApiRole", "Arn"] },
+                "IntegrationHttpMethod": "POST",
+                "IntegrationResponses": [],
+                "PassthroughBehavior": "NEVER",
+                "Type": "AWS_PROXY",
+                "Uri": { "Fn::Sub" :
+                    [ "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations", 
+                        { "lambdaArn": { "Fn::GetAtt" : ["demoApiApplication", "Arn"] } }
+                    ]
+                }
+              },
+              "MethodResponses": [],
+              "ResourceId": { "Ref": "ResourceAnyPathSlashed" },
+              "RestApiId": { "Ref": "demoApiGwRestApi" }
+            },
+            "Type": "AWS::ApiGateway::Method"
+          },
+          
+          "ResourceAnyPathSlashed": {
+            "Properties": {
+              "ParentId": { "Fn::GetAtt": ["demoApiGwRestApi", "RootResourceId"] },
+              "PathPart": "{proxy+}",
+              "RestApiId": { "Ref": "demoApiGwRestApi" }
+            },
+            "Type": "AWS::ApiGateway::Resource"
+        },
+
+        "demoApiGwDeployment": {
+            "Type": "AWS::ApiGateway::Deployment",
+            "DependsOn": ["demoApiGwRestApiANY0", "demoApiGwRestApiANY1"],
+            "Properties": {
+                "RestApiId": {"Ref": "demoApiGwRestApi"},
+                "Description": "Demo deployment",
+                "StageName": "Demo"
+            }
+        },
+        "demoApiGwStage": {
+            "Type": "AWS::ApiGateway::Stage",
+            "Properties": {
+                "StageName": "demo",
+                "Description": "Demo Stage",
+                "RestApiId": {
+                    "Ref": "demoApiGwRestApi"
+                },
+                "DeploymentId": {
+                    "Ref": "demoApiGwDeployment"
+                },
+                "AccessLogSetting": {
+                    "DestinationArn" : { "Fn::GetAtt" : ["lambdaLogGroup", "Arn"] },
+                    "Format" :"{\"requestId\": \"$context.requestId\", \"ip\": \"$context.identity.sourceIp\", \"api_key\" : \"$context.identity.apiKeyId\", \"caller\": \"$context.identity.caller\", \"user\": \"$context.identity.user\", \"requestTime\": \"$context.requestTime\", \"httpMethod\": \"$context.httpMethod\", \"resourcePath\": \"$context.resourcePath\", \"status\": \"$context.status\", \"protocol\": \"$context.protocol\", \"responseLength\": \"$context.responseLength\"}"
+                }
+            }
+        },
+        "demoApiGwUsagePlan": {
+            "Type": "AWS::ApiGateway::UsagePlan",
+            "Properties": {
+                "ApiStages": [
+                    {
+                        "ApiId" : { "Ref": "demoApiGwRestApi" },
+                        "Stage" : { "Ref": "demoApiGwStage" }
+                    }
+                ],
+                "Description": "Demo Public usage plan",
+                "Quota": {
+                    "Limit": 1000,
+                    "Period": "DAY"
+                },
+                "Throttle": {
+                    "BurstLimit": 20,
+                    "RateLimit": 10
+                },
+                "UsagePlanName": "Demo - Public"
+            }
+        }
+    },
+    "Outputs": {
+
+    }
+}
+
+
+

@@ -1,0 +1,6 @@
+{
+    "demo": {
+        "app_function": "quotes.app",
+        "runtime": "python3.8"
+    }
+}
