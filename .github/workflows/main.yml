@@ -51,6 +51,7 @@ jobs:
       - name: Build package
         run: |
           mkdir dist
+          source venv/bin/activate
           echo $VIRTUAL_ENV
           zappa package -o dist/demo-simple.zip
           cp cloudformation/stack.json dist/demo-simple.template
